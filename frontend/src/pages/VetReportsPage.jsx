@@ -5,7 +5,7 @@ import {
   FiActivity, 
   FiUsers, 
   FiFileText, 
-  FiBarChart3,
+  FiBarChart2,
   FiFilter,
   FiClock
 } from 'react-icons/fi';
@@ -177,7 +177,7 @@ const VetReportsPage = () => {
           className={`tab tab-lg ${activeTab === 'overview' ? 'tab-active' : ''}`}
           onClick={() => setActiveTab('overview')}
         >
-          <FiBarChart3 className="w-4 h-4 mr-2" />
+          <FiBarChart2 className="w-4 h-4 mr-2" />
           Resumen
         </button>
         <button
