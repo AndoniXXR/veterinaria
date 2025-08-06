@@ -213,6 +213,11 @@ export const AuthProvider = ({ children }) => {
   const isAdmin = () => hasRole('ADMIN');
   const isVeterinarian = () => hasRole('VETERINARIAN');
   const isUser = () => hasRole('USER');
+  
+  // Get token
+  const getToken = () => {
+    return state.token || localStorage.getItem('token');
+  };
 
   // Context value
   const value = {
@@ -234,7 +239,8 @@ export const AuthProvider = ({ children }) => {
     hasRole,
     isAdmin,
     isVeterinarian,
-    isUser
+    isUser,
+    getToken
   };
 
   return (

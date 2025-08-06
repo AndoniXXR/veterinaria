@@ -17,6 +17,7 @@ const orderRoutes = require('./routes/orders');
 const reportsRoutes = require('./routes/reports');
 const dashboardRoutes = require('./routes/dashboard');
 const veterinarianRoutes = require('./routes/veterinarians');
+const vetReportsRoutes = require('./routes/vetReports');
 
 const app = express();
 
@@ -133,6 +134,7 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/veterinarians', veterinarianRoutes);
+app.use('/api/vet/reports', vetReportsRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

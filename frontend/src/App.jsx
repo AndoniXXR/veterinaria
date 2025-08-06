@@ -37,6 +37,7 @@ import AdminReportsPage from './pages/AdminReportsPage';
 import ServiciosPage from './pages/ServiciosPage';
 import OrdersPage from './pages/OrdersPage';
 import VetPatientsPage from './pages/VetPatientsPage';
+import VetReportsPage from './pages/VetReportsPage';
 import ContactPage from './pages/ContactPage';
 
 // Layout wrapper component
@@ -190,6 +191,14 @@ function App() {
                 <ProtectedRoute allowedRoles={['VETERINARIAN']}>
                   <Layout>
                     <VetPatientsPage />
+                  </Layout>
+                </ProtectedRoute>
+              } />
+              
+              <Route path="/vet/reportes" element={
+                <ProtectedRoute allowedRoles={['VETERINARIAN']}>
+                  <Layout>
+                    <VetReportsPage />
                   </Layout>
                 </ProtectedRoute>
               } />

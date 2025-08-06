@@ -1,4 +1,5 @@
 const { prisma } = require('../config/database');
+const ExcelJS = require('exceljs');
 
 // Función auxiliar para obtener rango de fechas
 const getDateRange = (range) => {
@@ -530,11 +531,345 @@ const getCategoryColor = (category) => {
   return colors[category] || '#6b7280';
 };
 
+// Reportes específicos para veterinarios
+const getVeterinarianReports = async (req, res) => {
+  try {
+    const { range = '30d' } = req.query;
+    const { startDate, endDate } = getDateRange(range);
+    const veterinarianId = req.user.id;
+
+    // Citas atendidas por el veterinario
+    const appointmentsData = await prisma.appointment.findMany({
+      where: {
+        veterinarianId: veterinarianId,
+        createdAt: { gte: startDate, lte: endDate }
+      },
+      include: {
+        pet: {
+          select: {
+            id: true,
+            name: true,
+            species: true,
+            breed: true,
+            age: true
+          }
+        },
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true
+          }
+        },
+        diagnosis: {
+          select: {
+            id: true,
+            description: true,
+            treatment: true,
+            recommendations: true,
+            createdAt: true
+          }
+        }
+      },
+      orderBy: { date: 'desc' }
+    });
+
+    // Estadísticas generales
+    const stats = await Promise.all([
+      // Total de citas
+      prisma.appointment.count({
+        where: {
+          veterinarianId: veterinarianId,
+          createdAt: { gte: startDate, lte: endDate }
+        }
+      }),
+      // Citas completadas
+      prisma.appointment.count({
+        where: {
+          veterinarianId: veterinarianId,
+          status: 'COMPLETED',
+          createdAt: { gte: startDate, lte: endDate }
+        }
+      }),
+      // Diagnósticos realizados
+      prisma.diagnosis.count({
+        where: {
+          veterinarianId: veterinarianId,
+          createdAt: { gte: startDate, lte: endDate }
+        }
+      }),
+      // Mascotas únicas atendidas
+      prisma.appointment.findMany({
+        where: {
+          veterinarianId: veterinarianId,
+          createdAt: { gte: startDate, lte: endDate }
+        },
+        select: { petId: true },
+        distinct: ['petId']
+      })
+    ]);
+
+    // Distribución por especies
+    const speciesDistribution = await prisma.$queryRaw`
+      SELECT 
+        p.species,
+        COUNT(DISTINCT a.id) as appointments,
+        COUNT(DISTINCT p.id) as pets
+      FROM appointments a
+      JOIN pets p ON a.petId = p.id
+      WHERE a.veterinarianId = ${veterinarianId}
+        AND a.createdAt >= ${startDate}
+        AND a.createdAt <= ${endDate}
+      GROUP BY p.species
+      ORDER BY appointments DESC
+    `;
+
+    // Diagnósticos más frecuentes
+    const topDiagnoses = await prisma.diagnosis.groupBy({
+      where: {
+        veterinarianId: veterinarianId,
+        createdAt: { gte: startDate, lte: endDate }
+      },
+      by: ['description'],
+      _count: { id: true },
+      orderBy: { _count: { id: 'desc' } },
+      take: 10
+    });
+
+    // Citas por día de la semana
+    const weeklyDistribution = await prisma.$queryRaw`
+      SELECT 
+        CASE strftime('%w', a.date)
+          WHEN '0' THEN 'Domingo'
+          WHEN '1' THEN 'Lunes'
+          WHEN '2' THEN 'Martes'
+          WHEN '3' THEN 'Miércoles'
+          WHEN '4' THEN 'Jueves'
+          WHEN '5' THEN 'Viernes'
+          WHEN '6' THEN 'Sábado'
+        END as dayName,
+        strftime('%w', a.date) as dayNumber,
+        COUNT(*) as appointments
+      FROM appointments a
+      WHERE a.veterinarianId = ${veterinarianId}
+        AND a.createdAt >= ${startDate}
+        AND a.createdAt <= ${endDate}
+      GROUP BY strftime('%w', a.date)
+      ORDER BY dayNumber
+    `;
+
+    res.json({
+      success: true,
+      data: {
+        summary: {
+          totalAppointments: stats[0],
+          completedAppointments: stats[1],
+          totalDiagnoses: stats[2],
+          uniquePets: stats[3].length,
+          period: { startDate, endDate }
+        },
+        appointments: appointmentsData,
+        speciesDistribution: speciesDistribution.map(item => ({
+          species: item.species,
+          appointments: Number(item.appointments),
+          pets: Number(item.pets)
+        })),
+        topDiagnoses: topDiagnoses.map(item => ({
+          diagnosis: item.description,
+          count: item._count.id
+        })),
+        weeklyDistribution: weeklyDistribution.map(item => ({
+          day: item.dayName,
+          appointments: Number(item.appointments)
+        }))
+      }
+    });
+
+  } catch (error) {
+    console.error('Veterinarian reports error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'SERVER_ERROR',
+        message: 'Error al obtener reportes del veterinario'
+      }
+    });
+  }
+};
+
+// Exportar reporte de veterinario a Excel
+const exportVeterinarianReport = async (req, res) => {
+  try {
+    const { range = '30d' } = req.query;
+    const { startDate, endDate } = getDateRange(range);
+    const veterinarianId = req.user.id;
+
+    // Obtener datos del veterinario
+    const veterinarian = await prisma.user.findUnique({
+      where: { id: veterinarianId },
+      select: { name: true, email: true }
+    });
+
+    // Obtener datos de citas con toda la información
+    const appointmentsData = await prisma.appointment.findMany({
+      where: {
+        veterinarianId: veterinarianId,
+        createdAt: { gte: startDate, lte: endDate }
+      },
+      include: {
+        pet: {
+          include: {
+            user: {
+              select: { name: true, email: true, phone: true }
+            }
+          }
+        },
+        diagnosis: true
+      },
+      orderBy: { date: 'desc' }
+    });
+
+    // Crear workbook de Excel
+    const workbook = new ExcelJS.Workbook();
+    
+    // Hoja de resumen
+    const summarySheet = workbook.addWorksheet('Resumen');
+    summarySheet.columns = [
+      { header: 'Métrica', key: 'metric', width: 30 },
+      { header: 'Valor', key: 'value', width: 20 }
+    ];
+
+    const totalCitas = appointmentsData.length;
+    const citasCompletadas = appointmentsData.filter(a => a.status === 'COMPLETED').length;
+    const diagnosticos = appointmentsData.filter(a => a.diagnosis).length;
+    const mascotasUnicas = new Set(appointmentsData.map(a => a.petId)).size;
+
+    summarySheet.addRows([
+      { metric: 'Veterinario', value: veterinarian.name },
+      { metric: 'Período', value: `${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}` },
+      { metric: 'Total de Citas', value: totalCitas },
+      { metric: 'Citas Completadas', value: citasCompletadas },
+      { metric: 'Diagnósticos Realizados', value: diagnosticos },
+      { metric: 'Mascotas Atendidas', value: mascotasUnicas },
+      { metric: 'Tasa de Completitud', value: `${totalCitas > 0 ? Math.round((citasCompletadas / totalCitas) * 100) : 0}%` }
+    ]);
+
+    // Hoja de citas detalladas
+    const appointmentsSheet = workbook.addWorksheet('Citas Detalladas');
+    appointmentsSheet.columns = [
+      { header: 'Fecha', key: 'date', width: 15 },
+      { header: 'Hora', key: 'time', width: 10 },
+      { header: 'Mascota', key: 'petName', width: 15 },
+      { header: 'Especie', key: 'species', width: 12 },
+      { header: 'Raza', key: 'breed', width: 15 },
+      { header: 'Propietario', key: 'ownerName', width: 20 },
+      { header: 'Teléfono', key: 'ownerPhone', width: 15 },
+      { header: 'Motivo', key: 'reason', width: 25 },
+      { header: 'Estado', key: 'status', width: 12 },
+      { header: 'Diagnóstico', key: 'diagnosis', width: 30 },
+      { header: 'Tratamiento', key: 'treatment', width: 30 }
+    ];
+
+    appointmentsData.forEach(appointment => {
+      const date = new Date(appointment.date);
+      appointmentsSheet.addRow({
+        date: date.toLocaleDateString(),
+        time: date.toLocaleTimeString(),
+        petName: appointment.pet.name,
+        species: appointment.pet.species,
+        breed: appointment.pet.breed,
+        ownerName: appointment.pet.user.name,
+        ownerPhone: appointment.pet.user.phone || 'N/A',
+        reason: appointment.reason,
+        status: appointment.status === 'COMPLETED' ? 'Completada' : 
+                appointment.status === 'PENDING' ? 'Pendiente' :
+                appointment.status === 'CONFIRMED' ? 'Confirmada' : 'Cancelada',
+        diagnosis: appointment.diagnosis?.description || 'Sin diagnóstico',
+        treatment: appointment.diagnosis?.treatment || 'Sin tratamiento'
+      });
+    });
+
+    // Aplicar estilos
+    summarySheet.getRow(1).font = { bold: true };
+    appointmentsSheet.getRow(1).font = { bold: true };
+    
+    // Configurar respuesta para descarga
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=Reporte_Veterinario_${veterinarian.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+    await workbook.xlsx.write(res);
+    res.end();
+
+  } catch (error) {
+    console.error('Export veterinarian report error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'SERVER_ERROR',
+        message: 'Error al exportar reporte'
+      }
+    });
+  }
+};
+
+// Obtener historial de reportes generados
+const getReportHistory = async (req, res) => {
+  try {
+    const veterinarianId = req.user.id;
+
+    // Por ahora simulamos un historial
+    // En una implementación real, guardaríamos cada reporte generado en la BD
+    const mockHistory = [
+      {
+        id: 1,
+        type: 'Reporte Mensual',
+        period: '2025-01-01 a 2025-01-31',
+        generatedAt: new Date().toISOString(),
+        stats: {
+          appointments: 45,
+          diagnoses: 38,
+          pets: 32
+        }
+      },
+      {
+        id: 2,
+        type: 'Reporte Semanal',
+        period: '2025-01-20 a 2025-01-27',
+        generatedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+        stats: {
+          appointments: 12,
+          diagnoses: 10,
+          pets: 11
+        }
+      }
+    ];
+
+    res.json({
+      success: true,
+      data: mockHistory
+    });
+
+  } catch (error) {
+    console.error('Report history error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'SERVER_ERROR',
+        message: 'Error al obtener historial de reportes'
+      }
+    });
+  }
+};
+
 module.exports = {
   getDashboardOverview,
   getFinancialReports,
   getClientReports,
   getOperationalReports,
   getClinicalReports,
-  getServicesDistribution
+  getServicesDistribution,
+  getVeterinarianReports,
+  exportVeterinarianReport,
+  getReportHistory
 };
