@@ -1,0 +1,50 @@
+Quiero que me ayudes a crear una plataforma web para una clínica veterinaria con las siguientes características. Utiliza el stack tecnológico: React.js (frontend), Node.js con Express (backend), Prisma ORM y PostgreSQL (base de datos). Usa Tailwind CSS para el diseño visual y Cloudinary para subir imágenes.
+
+La plataforma debe incluir:
+
+1. **Sistema de usuarios**:
+   - Registro, inicio de sesión y cierre de sesión
+   - Roles: Usuario normal, Veterinario, Administrador
+   - Perfil con foto, nombre, email, teléfono, dirección
+
+2. **Gestión de mascotas**:
+   - Cada usuario puede registrar una o varias mascotas
+   - Datos de la mascota: nombre, especie, raza, edad, peso, género, foto
+   - Cada mascota puede tener múltiples diagnósticos
+
+3. **Sistema de citas médicas**:
+   - El usuario puede agendar citas para sus mascotas
+   - Cada cita tiene fecha, hora, mascota asociada, veterinario asignado, motivo, estado (pendiente, completada, cancelada)
+   - El veterinario ve su calendario de citas (idealmente usando FullCalendar)
+
+4. **Diagnósticos médicos**:
+   - Cada mascota tiene un historial de diagnósticos
+   - Cada diagnóstico lo registra un veterinario
+   - Incluye fecha, descripción, receta, archivos adjuntos (como PDF o imágenes)
+
+5. **Sección de tienda**:
+   - Catálogo de productos (nombre, descripción, imagen, precio, stock)
+   - Carrito de compras
+   - Checkout con integración de pago (usar Stripe o MercadoPago)
+   - Órdenes con estado (pendiente, pagado, enviado)
+
+6. **Paneles diferenciados**:
+   - Usuario: ver y editar perfil, mascotas, citas, historial médico, compras
+   - Veterinario: ver agenda, registrar diagnósticos, ver historial de mascotas asignadas
+   - Administrador: CRUD de productos, usuarios, veterinarios, visualización de órdenes
+
+7. **Extras importantes**:
+   - Subida de imágenes con Cloudinary (para perfiles, mascotas, productos)
+   - Rutas protegidas por rol (middleware de autorización)
+   - Diseño responsive (Tailwind CSS)
+   - Arquitectura limpia (separación de carpetas y módulos)
+
+Necesito que generes:
+- La estructura de carpetas del proyecto (frontend y backend)
+- Los modelos de datos con Prisma
+- Las rutas principales del API REST (por roles)
+- Ejemplo de endpoints para citas y diagnósticos
+- El flujo de autenticación con JWT
+- Y un ejemplo de formulario en React (con Tailwind y Formik) para registrar una mascota, con validación
+
+Prioriza buenas prácticas y mantenibilidad del código. Si necesitas dividir la entrega por partes, hazlo paso a paso.

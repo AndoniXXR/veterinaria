@@ -1,0 +1,186 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  VETERINARIAN
+  ADMIN
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  UNKNOWN
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  phone     String?
+  address   String?
+  photo     String?
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pets         Pet[]
+  appointments Appointment[]
+  orders       Order[]
+  diagnoses    Diagnosis[]
+
+  @@map("users")
+}
+
+model Pet {
+  id       String  @id @default(cuid())
+  name     String
+  species  String
+  breed    String?
+  age      Int?
+  weight   Float?
+  gender   Gender  @default(UNKNOWN)
+  photo    String?
+  ownerId  String
+  owner    User    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  appointments Appointment[]
+  diagnoses    Diagnosis[]
+
+  @@map("pets")
+}
+
+model Appointment {
+  id            String            @id @default(cuid())
+  date          DateTime
+  reason        String
+  status        AppointmentStatus @default(PENDING)
+  notes         String?
+  
+  petId         String
+  pet           Pet               @relation(fields: [petId], references: [id], onDelete: Cascade)
+  
+  userId        String
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  veterinarianId String?
+  veterinarian   User?            @relation("VeterinarianAppointments", fields: [veterinarianId], references: [id])
+
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  diagnosis     Diagnosis?
+
+  @@map("appointments")
+}
+
+model Diagnosis {
+  id           String   @id @default(cuid())
+  description  String
+  prescription String?
+  files        String[] // URLs de archivos en Cloudinary
+  
+  petId        String
+  pet          Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+  
+  veterinarianId String
+  veterinarian   User   @relation(fields: [veterinarianId], references: [id])
+  
+  appointmentId String? @unique
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("diagnoses")
+}
+
+model Product {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  image       String?
+  price       Float
+  stock       Int     @default(0)
+  isActive    Boolean @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  orderItems  OrderItem[]
+
+  @@map("products")
+}
+
+model Order {
+  id         String      @id @default(cuid())
+  total      Float
+  status     OrderStatus @default(PENDING)
+  
+  userId     String
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  orderItems OrderItem[]
+  payment    Payment?
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  quantity  Int
+  price     Float
+  
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_items")
+}
+
+model Payment {
+  id              String   @id @default(cuid())
+  amount          Float
+  currency        String   @default("USD")
+  paymentMethod   String
+  transactionId   String?
+  status          String
+  
+  orderId         String   @unique
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("payments")
+}
